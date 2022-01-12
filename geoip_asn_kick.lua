@@ -2,26 +2,40 @@
 
 local has_beerchat = minetest.get_modpath("beerchat")
 
+local ban_message = "you are joining from a blacklisted network that is known for "
+	.. "troublemakers, if you think this is a mistake please report this on irc/discord"
+
 local blacklisted_asn = {
 	-- "map-attack" hacks over various ip's
 	[49453] = true
 }
 
+geoip.register_on_prejoinplayer(function(name, result)
+	if result.asn and blacklisted_asn[result.asn] then
+		-- blacklisted, kick player
+		local msg = "Player '" .. name .. "' prejoin from a blacklisted ASN: '" .. result.asn .. "'"
+		minetest.log("action", "[beowulf] " .. msg)
+		if has_beerchat then
+			beerchat.send_on_channel("Geoip-ASN-Kick", beerchat.moderator_channel_name, msg)
+		end
+		if minetest.settings:get_bool("beowulf.geoip_asn_kick.enable", false) then
+			return ban_message
+		end
+	end
+end)
+
 geoip.joinplayer_callback = function(name, result)
-	if result.data and result.data.geo and result.data.geo.asn then
-		if blacklisted_asn[result.data.geo.asn] then
-			-- blacklisted, kick player
-			local msg = "Player '" .. name .. "' joined from a blacklisted ASN: '" .. result.data.geo.asn .. "'"
-			minetest.log("action", "[beowulf] " .. msg)
-			if has_beerchat then
-					beerchat.send_on_channel("Geoip-ASN-Kick", beerchat.moderator_channel_name, msg)
-			end
-			if minetest.settings:get_bool("beowulf.geoip_asn_kick.enable", false) then
-				minetest.after(0, function()
-					minetest.kick_player(name, "you are joining from a blacklisted network that is known for troublemakers, " ..
-						"if you think this is a mistake please report this on irc/discord")
-				end)
-			end
+	if result.asn and blacklisted_asn[result.asn] then
+		-- blacklisted, kick player
+		local msg = "Player '" .. name .. "' joined from a blacklisted ASN: '" .. result.asn .. "'"
+		minetest.log("action", "[beowulf] " .. msg)
+		if has_beerchat then
+			beerchat.send_on_channel("Geoip-ASN-Kick", beerchat.moderator_channel_name, msg)
+		end
+		if minetest.settings:get_bool("beowulf.geoip_asn_kick.enable", false) then
+			minetest.after(0, function()
+				minetest.kick_player(name, ban_message)
+			end)
 		end
 	end
 end
